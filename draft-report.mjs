@@ -5,21 +5,14 @@ const positions = ["QB", "RB", "WR", "TE"];
 const slots = ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "FLEX"];
 const scoringKeys = ["pass_yd", "pass_td", "pass_int", "pass_2pt", "rush_yd", "rush_td", "rush_2pt", "rec", "rec_yd", "rec_td", "rec_2pt", "fum", "fum_lost", "fum_rec_td"];
 const sum = values => values.reduce((a, b) => a + b, 0);
-const mean = values => values.length ? sum(values) / values.length : 0;
 
 export function letter(value) {
   if (value == null || !Number.isFinite(value)) return null;
   return [[97, "A+"], [93, "A"], [90, "A-"], [87, "B+"], [83, "B"], [80, "B-"], [77, "C+"], [73, "C"], [70, "C-"], [67, "D+"], [63, "D"], [60, "D-"]].find(([min]) => value >= min)?.[1] || "F";
 }
 
-export function viabilityScore(ratio) {
-  const anchors = [[0, 0], [0.5, 50], [0.65, 60], [0.75, 70], [0.85, 80], [0.95, 90], [1, 93], [1.1, 100]];
-  if (ratio <= 0) return 0;
-  for (let i = 1; i < anchors.length; i++) {
-    const [upper, score] = anchors[i], [lower, previous] = anchors[i - 1];
-    if (ratio <= upper) return previous + (score - previous) * (ratio - lower) / (upper - lower);
-  }
-  return 100;
+export function roleScore(players, references, weights = references.map(() => 1)) {
+  return sum(references.map((reference, index) => Math.max(0, Math.min(1, (players[index]?.points || 0) / reference)) * weights[index])) / sum(weights) * 100;
 }
 
 export function projectedPoints(record, scoring) {
@@ -47,24 +40,22 @@ export function buildReport(snapshot) {
     injuryNotes: record.player.injury_notes || null,
   }));
   const byId = new Map(players.map(player => [player.id, player]));
-  // Build equal-slot benchmarks from the full player pool, not the spread of this league's grades.
+  // Footballguys' documented By Pos reference roles inspire this, not its unpublished letter formula.
   const pool = players.filter(player => Number.isFinite(player.points)).sort((a, b) => b.points - a.points);
   const selected = new Set();
   const benchmarks = Object.fromEntries(positions.map(position => {
     const group = pool.filter(player => player.position === position).slice(0, slots.filter(slot => slot === position).length * 12);
     group.forEach(player => selected.add(player.id));
-    return [position, sum(group.map(player => player.points)) / 12];
+    return [position, Array.from({ length: slots.filter(slot => slot === position).length }, (_, index) => group[index * 12]?.points)];
   }));
-  const flexBenchmark = sum(pool.filter(player => player.position !== "QB" && !selected.has(player.id)).slice(0, 24).map(player => player.points)) / 12;
-  const lineupBenchmark = sum(Object.values(benchmarks)) + flexBenchmark;
-  if (Object.values(benchmarks).some(value => value <= 0) || flexBenchmark <= 0) throw new Error("Insufficient starting-lineup benchmark data.");
-  const drafted = new Set(picks.map(pick => String(pick.player_id)));
-  // ponytail: median of the top three undrafted projections is a streaming baseline, not a waiver acquisition forecast.
-  const replacements = positions.map(position => {
-    const pool = players.filter(player => player.position === position && !drafted.has(player.id) && Number.isFinite(player.points)).sort((a, b) => b.points - a.points);
-    if (pool.length < 3) throw new Error(`Insufficient ${position} replacement data.`);
-    return { id: `replacement-${position}`, name: `Undrafted ${position} baseline`, position, points: pool[1].points };
-  });
+  const flexPool = pool.filter(player => player.position !== "QB" && !selected.has(player.id)).slice(0, 24);
+  const flexBenchmark = [flexPool[0]?.points, flexPool[12]?.points];
+  flexPool.forEach(player => selected.add(player.id));
+  const depthBenchmarks = Object.fromEntries(positions.map(position => {
+    const reserves = pool.filter(player => player.position === position && !selected.has(player.id));
+    return [position, [reserves[0]?.points, ...(["RB", "WR"].includes(position) ? [reserves[12]?.points] : [])]];
+  }));
+  if ([...Object.values(benchmarks).flat(), ...flexBenchmark, ...Object.values(depthBenchmarks).flat()].some(value => !Number.isFinite(value) || value <= 0)) throw new Error("Insufficient positional benchmark data.");
   const teams = Object.entries(draft.draft_order).map(([owner, slot]) => {
     const user = users.find(user => user.user_id === owner);
     const roster = picks.filter(pick => pick.draft_slot === slot).sort((a, b) => a.pick_no - b.pick_no).map(pick => byId.get(String(pick.player_id)) || {
@@ -75,35 +66,27 @@ export function buildReport(snapshot) {
     const starterIds = new Set(starters.filter(Boolean).map(player => player.id));
     const bench = roster.filter(player => !starterIds.has(player.id));
     const missing = roster.filter(player => !Number.isFinite(player.points));
-    const coverage = starters.map(starter => {
-      if (!starter) return { total: sum(starters.filter(Boolean).map(player => player.points)), replacement: 0 };
-      const baseline = starters.filter(player => player && player.id !== starter.id);
-      const replacement = replacements.find(player => player.position === starter.position);
-      const covered = lineup([...baseline, ...bench, replacement]);
-      return { total: sum(covered.filter(Boolean).map(player => player.points)), replacement: Math.max(0, sum(covered.filter(Boolean).map(player => player.points)) - sum(baseline.map(player => player.points))) };
-    });
-    return { owner, name: user?.metadata?.team_name || user?.display_name || `Draft slot ${slot}`, roster, starters, bench, missing,
-      starterValue: sum(starters.filter(Boolean).map(player => player.points)), coverage,
-    };
+    return { owner, name: user?.metadata?.team_name || user?.display_name || `Draft slot ${slot}`, roster, starters, bench, missing };
   });
   const complete = teams.every(team => !team.missing.length);
   const positionScores = Object.fromEntries(positions.map(position => [position, {
-    starters: teams.map(team => viabilityScore(sum(team.starters.filter(player => player?.slot === position).map(player => player.points)) / benchmarks[position])),
-    // ponytail: a reserve restoring 65% of a typical starter is adequate cover; weekly injury/bye modeling would refine this.
-    depth: teams.map(team => viabilityScore(mean(team.coverage.filter((_, index) => team.starters[index]?.position === position).map(value => value.replacement)) / (0.65 * benchmarks[position] / slots.filter(slot => slot === position).length))),
+    starters: teams.map(team => roleScore(team.starters.filter(player => player?.slot === position), benchmarks[position])),
+    // ponytail: two reserve roles for RB/WR, one for QB/TE; weekly availability would require separate projections.
+    depth: teams.map(team => roleScore(team.bench.filter(player => player.position === position).sort((a, b) => b.points - a.points), depthBenchmarks[position], depthBenchmarks[position].map((_, index) => index === 0 ? 2 : 1))),
   }]));
   const results = teams.map((team, index) => {
-    const overallScore = viabilityScore((0.8 * team.starterValue + 0.2 * mean(team.coverage.map(value => value.total))) / lineupBenchmark);
+    const starterScore = (sum(positions.map(position => positionScores[position].starters[index] * benchmarks[position].length)) + 2 * roleScore(team.starters.filter(player => player?.slot === "FLEX"), flexBenchmark)) / 9;
+    const depthScore = sum(positions.map(position => positionScores[position].depth[index] * benchmarks[position].length)) / 7;
+    const overallScore = 0.9 * starterScore + 0.1 * depthScore;
     const categories = positions.map(position => {
       const starters = team.starters.filter(player => player?.position === position);
       const bench = team.bench.filter(player => player.position === position);
       const depth = positionScores[position].depth[index];
-      const replacement = replacements.find(player => player.position === position);
-      const streamable = replacement.points >= benchmarks[position] / slots.filter(slot => slot === position).length * 0.65;
       const names = starters.filter(player => player.slot === position).map(player => player.name).join(", ");
+      const referenceNames = benchmarks[position].map((_, index) => pool.filter(player => player.position === position)[index * 12].name).join(", ");
       const flex = starters.filter(player => player.slot === "FLEX").map(player => player.name);
       return { position, starters: complete ? letter(positionScores[position].starters[index]) : null, depth: complete ? letter(depth) : null,
-        explanation: `Starter grade: ${names || "No starter"}. ${flex.length ? `${flex.join(", ")} contributes at FLEX to the overall grade, not this fixed-slot starter grade or bench depth. ` : ""}${bench.length ? `Reserve options: ${bench.map(player => player.name).join(", ")}.` : "No drafted reserve at this position."} ${streamable ? "The undrafted pool provides a reasonable coverage baseline." : "Coverage is evaluated against the undrafted pool and this league's starting requirements."}`,
+        explanation: `Starter grade: ${names || "No starter"}. Reference players: ${referenceNames}. ${flex.length ? `${flex.join(", ")} contributes at FLEX to the overall grade, not this fixed-slot starter grade or bench depth. ` : ""}${bench.length ? `Reserve options: ${bench.map(player => player.name).join(", ")}.` : "No drafted reserve at this position. The depth F means no owned cover, not a bad draft decision."} Depth compares drafted reserves with positional reserve roles. Waiver pickups are not credited.`,
       };
     });
     const ordered = [...positions].sort((a, b) => positionScores[b].starters[index] - positionScores[a].starters[index]);
@@ -111,7 +94,7 @@ export function buildReport(snapshot) {
     const risks = team.roster.filter(player => player.injury).map(player => `${player.name}: ${player.injury}${player.injuryNotes ? `. ${player.injuryNotes}` : ""}`);
     const publicPlayer = player => ({ id: player.id, name: player.name, position: player.position, slot: player.slot || "Bench" });
     return { name: team.name, owner: team.owner, overall: complete ? letter(overallScore) : null, categories,
-      summary: complete ? `${ordered[0]} is the strongest fixed-position group against the league-sized starter benchmark; ${ordered.at(-1)} is the weakest. ${weakestDepth} has the thinnest coverage. The overall grade evaluates the full lineup, including FLEX, and how much production it retains when one starter is unavailable.` : "League comparison is unavailable until every drafted roster has sufficient projection data.",
+      summary: complete ? `${ordered[0]} is the strongest fixed-position group against the positional reference roles; ${ordered.at(-1)} is the weakest. ${weakestDepth} has the thinnest drafted depth. Overall emphasizes the full starting lineup, including FLEX, with a smaller contribution from owned reserves.` : "League comparison is unavailable until every drafted roster has sufficient projection data.",
       strength: complete ? ordered[0] : null, weakness: complete ? ordered.at(-1) : null,
       risks: risks.length ? risks : ["No injury designation in this snapshot. That does not establish that the roster is risk-free."],
       uncertainty: "Season projections do not measure player ceilings or championship probabilities. No separate upside bonus is assumed.",

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildReport, letter, lineup, viabilityScore, projectedPoints, loadReport } from "../draft-report.mjs";
+import { buildReport, letter, lineup, roleScore, projectedPoints, loadReport } from "../draft-report.mjs";
 import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
 import { tmpdir } from "node:os";
@@ -19,7 +19,7 @@ function fixture() {
       snapshot.projections.push({ player_id: id, player: { first_name: id, last_name: "Player", position }, stats: position === "QB" ? { pass_yd: 5000 } : { rec_yd: 1500 - index * 40, rec: 50 } });
     });
   }
-  for (const position of ["QB", "RB", "WR", "TE"]) for (let i = 0; i < 3; i++) snapshot.projections.push({ player_id: `${position}-free-${i}`, player: { first_name: "Free", last_name: position, position }, stats: position === "QB" ? { pass_yd: 4000 } : { rec_yd: 600, rec: 40 } });
+  for (const position of ["QB", "RB", "WR", "TE"]) for (let i = 0; i < 24; i++) snapshot.projections.push({ player_id: `${position}-free-${i}`, player: { first_name: "Free", last_name: position, position }, stats: position === "QB" ? { pass_yd: 4000 } : { rec_yd: 600, rec: 40 } });
   return snapshot;
 }
 
@@ -39,10 +39,10 @@ test("report scores league rules, assigns FLEX once, and keeps missing projectio
   assert.equal(report.teams.length, 12);
   assert.equal(report.warning, null);
   for (const team of report.teams) {
-    assert.match(team.overall, /^A/);
+    assert.equal(team.overall, "A+");
     assert.equal(team.roster.length, 15);
     assert.equal(team.categories.length, 4);
-    assert.match(team.categories.find(c => c.position === "QB").depth, /^A/);
+    assert.equal(team.categories.find(c => c.position === "QB").depth, "F");
     assert.ok(team.categories.find(c => c.position === "TE").depth);
     assert.equal(Object.hasOwn(team, "sortScore"), false);
   }
@@ -56,18 +56,43 @@ test("report scores league rules, assigns FLEX once, and keeps missing projectio
   assert.throws(() => buildReport(snapshot), /180/);
 });
 
-test("viability thresholds reward competitive rosters without forcing a grade distribution", () => {
-  assert.equal(letter(viabilityScore(1)), "A");
-  assert.equal(letter(viabilityScore(0.95)), "A-");
-  assert.equal(letter(viabilityScore(0.9)), "B");
-  assert.equal(letter(viabilityScore(0.8)), "C");
-  assert.equal(letter(viabilityScore(0.7)), "D");
-  assert.equal(letter(viabilityScore(0.5)), "F");
+test("role calibration uses production ratios, caps excess, and penalizes empty roles", () => {
+  for (const [ratio, grade] of [[1, "A+"], [.95, "A"], [.9, "A-"], [.85, "B"], [.75, "C"], [.65, "D"], [.5, "F"]]) {
+    assert.equal(letter(roleScore([{ points: 200 * ratio }], [200])), grade);
+  }
+  assert.equal(roleScore([{ points: 1000 }], [200, 150]), 50, "One star cannot erase an empty second slot");
+  assert.equal(roleScore([], [200]), 0);
+  assert.ok(Math.abs(roleScore([{ points: 100 }], [100, 80], [2, 1]) - 200 / 3) < 1e-10);
   assert.equal(letter(93), "A");
   assert.equal(letter(92.999), "A-");
   assert.equal(letter(75), "C");
   assert.equal(letter(59), "F");
   assert.equal(letter(null), null);
+});
+
+test("roster stress cases distinguish elite starters, empty benches, and weaker production", () => {
+  const baseline = fixture();
+  const original = buildReport(baseline);
+  const target = report => report.teams.find(team => team.owner === "owner-1");
+  const startingIds = new Set(target(original).roster.filter(player => player.slot !== "Bench").map(player => player.id));
+  const shallow = structuredClone(baseline);
+  for (const record of shallow.projections.filter(record => record.player_id.startsWith("1-") && !startingIds.has(record.player_id))) record.stats = { rec: 0 };
+  const shallowReport = buildReport(shallow);
+  assert.equal(target(original).overall, "A+");
+  assert.equal(target(shallowReport).overall, "A-", "Empty depth loses a real part of the overall score");
+  assert.deepEqual(target(shallowReport).categories.map(c => c.starters), target(original).categories.map(c => c.starters));
+  assert.ok(target(shallowReport).categories.every(c => c.depth === "F"));
+  for (const other of original.teams.filter(team => team.owner !== "owner-1")) {
+    assert.deepEqual(shallowReport.teams.find(team => team.owner === other.owner), other, "Changing a roster below reference ranks cannot curve other teams");
+  }
+  const weaker = structuredClone(baseline);
+  for (const record of weaker.projections.filter(record => record.player_id.startsWith("1-"))) {
+    record.stats = Object.fromEntries(Object.entries(record.stats).map(([key, value]) => [key, value * .75]));
+  }
+  assert.match(target(buildReport(weaker)).overall, /^C/);
+  const richerWaivers = structuredClone(baseline);
+  for (const record of richerWaivers.projections.filter(record => record.player_id.includes("-free-"))) record.stats = { rec_yd: 1500 };
+  assert.equal(target(buildReport(richerWaivers)).categories.find(c => c.position === "QB").depth, "F", "Available players cannot become owned depth");
 });
 
 test("known weak and incomplete rosters earn poor grades; team identity cannot affect grades", () => {
@@ -77,7 +102,7 @@ test("known weak and incomplete rosters earn poor grades; team identity cannot a
   }
   let report = buildReport(snapshot);
   assert.equal(report.teams.find(team => team.owner === "owner-1").overall, "F");
-  assert.ok(report.teams.filter(team => team.owner !== "owner-1").every(team => team.overall.startsWith("A")));
+  assert.ok(report.teams.filter(team => team.owner !== "owner-1").every(team => team.overall !== "F"));
   snapshot.users = [{ user_id: "owner-1", metadata: { team_name: "My favorite team" } }];
   assert.equal(buildReport(snapshot).teams.find(team => team.owner === "owner-1").overall, "F");
   for (const record of snapshot.projections.filter(record => record.player_id.startsWith("1-"))) record.player.position = "QB";
