@@ -76,7 +76,7 @@ export function buildReport(snapshot) {
   const starterScores = normalize(teams.map(team => team.starterValue));
   const depthScores = normalize(teams.map(team => team.depthValue));
   const positionScores = Object.fromEntries(positions.map(position => [position, {
-    starters: normalize(teams.map(team => sum(team.starters.filter(player => player?.position === position).map(player => player.points)))),
+    starters: normalize(teams.map(team => sum(team.starters.filter(player => player?.slot === position).map(player => player.points)))),
     depth: normalize(teams.map(team => mean(team.coverage.filter((_, index) => team.starters[index]?.position === position)))),
   }]));
   const results = teams.map((team, index) => {
@@ -90,9 +90,10 @@ export function buildReport(snapshot) {
       const typicalStarter = mean(teams.map(other => Math.max(...other.starters.filter(player => player?.position === position).map(player => player.points), 0)));
       const streamable = ["QB", "TE"].includes(position) && replacement.points >= typicalStarter * 0.65;
       if (streamable) depth = Math.max(75, depth);
-      const names = starters.map(player => `${player.name}${player.slot === "FLEX" ? " (FLEX)" : ""}`).join(", ");
+      const names = starters.filter(player => player.slot === position).map(player => player.name).join(", ");
+      const flex = starters.filter(player => player.slot === "FLEX").map(player => player.name);
       return { position, starters: complete ? letter(positionScores[position].starters[index]) : null, depth: complete ? letter(depth) : null,
-        explanation: `${names || "No starter"}. ${bench.length ? `Reserve options: ${bench.map(player => player.name).join(", ")}.` : "No drafted reserve at this position."} ${streamable ? "The undrafted pool provides a reasonable coverage baseline." : "Coverage is evaluated against the undrafted pool and this league's starting requirements."}`,
+        explanation: `Starter grade: ${names || "No starter"}. ${flex.length ? `${flex.join(", ")} contributes at FLEX to the overall grade, not this fixed-slot starter grade or bench depth. ` : ""}${bench.length ? `Reserve options: ${bench.map(player => player.name).join(", ")}.` : "No drafted reserve at this position."} ${streamable ? "The undrafted pool provides a reasonable coverage baseline." : "Coverage is evaluated against the undrafted pool and this league's starting requirements."}`,
       };
     });
     const ordered = [...positions].sort((a, b) => positionScores[b].starters[index] - positionScores[a].starters[index]);

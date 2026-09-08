@@ -16,7 +16,7 @@ Status: implemented. Requirements were established in the grill-with-docs sessio
 - Show nine grades per team: one overall grade and starter/depth grades for each of QB, RB, WR, and TE, with short explanations.
 - Present category evaluations as letter grades only. Keep numerical grading scores, component scores, and calculation weights internal; do not show numeric scores alongside the letters. Retain the agreed written explanations.
 - Calculate grades from projected production and useful depth. Discuss supported upside and risk in the written analysis, without separate speculative numerical adjustments. The user accepted this limitation.
-- Players assigned to FLEX count toward starting strength in their position group and must not also count as bench depth.
+- Players assigned to FLEX count toward overall starting strength and must not also count as bench depth. Positional starter grades compare only the same required position slots across teams; this corrects the unfair comparison between one TE and a TE plus a FLEX TE.
 - Limit the initial version to the 2026 Minnesota Madness draft.
 - Add a Draft report page to the existing companion. A separate app can be considered later.
 - Show a league comparison table and a detailed report for each team containing the drafted roster, grade explanations, biggest strength, biggest weakness, and key risks.
@@ -49,7 +49,7 @@ The implementation uses the approved current-information fallback, prominently l
 
 Reconstruct every roster from the completed picks, including players omitted by the existing draft recommendation filters. Calculate projected points under the league's scoring rules. Use Sleeper full-season statistical projections with the league's offensive scoring settings, including TE reception premium. The saved FantasyPros data is from a different date and is not blended into this snapshot. Retain the source, season horizon, and retrieval timestamp. Missing projections withhold grades league-wide rather than silently penalizing affected teams or changing the comparison population.
 
-Select the highest projected legal starting lineup: 1 QB, 2 RB, 3 WR, 1 TE, and 2 eligible FLEX players. Starter strength is that lineup's projected point total. Positional starter grades describe contributions from that position, including FLEX assignments.
+Select the highest projected legal starting lineup: 1 QB, 2 RB, 3 WR, 1 TE, and 2 eligible FLEX players. Overall starter strength is that lineup's projected point total. Positional starter grades compare the required 1 QB, 2 RB, 3 WR, or 1 TE only. FLEX production remains in the overall score and FLEX assignments remain visible in each team's explanation and roster. Adding an extra player at FLEX cannot change the grade of an unchanged fixed-position group.
 
 ### Useful depth
 

@@ -65,6 +65,24 @@ test("letter boundaries and an identical league have stable grades", () => {
   assert.equal(letter(null), null);
 });
 
+test("FLEX allocation cannot inflate or dilute fixed-position starter grades", () => {
+  for (const [position, yards] of [["TE", 1600], ["RB", 1540], ["WR", 1540]]) {
+    const snapshot = fixture();
+    const original = buildReport(snapshot);
+    const reserve = snapshot.projections.find(player => player.player_id === "1-14");
+    reserve.player.position = position;
+    reserve.stats = { rec_yd: yards, rec: 0 };
+    const changed = buildReport(snapshot);
+    const team = changed.teams.find(team => team.owner === "owner-1");
+    assert.equal(team.roster.find(player => player.id === "1-14").slot, "FLEX");
+    for (const current of changed.teams) {
+      const previous = original.teams.find(team => team.owner === current.owner);
+      assert.deepEqual(current.categories.map(c => c.starters), previous.categories.map(c => c.starters), `${position} FLEX must not change anyone's fixed-slot grades`);
+    }
+    assert.notEqual(team.overall, original.teams.find(team => team.owner === "owner-1").overall, "FLEX improvement still contributes to overall strength");
+  }
+});
+
 test("a fresh checkout freezes a complete snapshot and reopens it without fetching", async () => {
   const root = await mkdtemp(join(tmpdir(), "draft-report-test-"));
   try {

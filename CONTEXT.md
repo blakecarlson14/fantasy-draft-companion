@@ -79,8 +79,8 @@ The fixed body of evidence used to evaluate every drafted roster. It uses draft-
 _Avoid_: Live grade
 
 **Starter grade**:
-A position group's letter grade for its contribution to the starting lineup, including players assigned to FLEX.
-_Avoid_: Position slot grade
+A letter grade comparing the same required position slots across every team: one QB, two RBs, three WRs, or one TE. FLEX production contributes to the overall roster grade, not the fixed-position starter comparison.
+_Avoid_: Combined position production
 
 **Depth grade**:
 A position group's letter grade for the remaining drafted players behind its starters. Players counted as starters, including FLEX starters, are not also counted as depth.
