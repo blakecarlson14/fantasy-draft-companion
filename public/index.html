@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Draft Night</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b0d10;--panel:#151920;--line:#29303a;--text:#f2f5f7;--muted:#9ba7b4;--accent:#70e1a1;--warn:#ffc857;--danger:#ff6b6b;--blue:#70b7ff}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif}button,input,select{font:inherit}button{cursor:pointer}.shell{max-width:1500px;margin:auto;padding:20px}.top{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}.top h1{margin:0;font-size:26px}.status{display:flex;gap:9px;flex-wrap:wrap}.pill{border:1px solid var(--line);border-radius:99px;padding:6px 10px;color:var(--muted)}.pill.live{color:var(--accent);border-color:#2f6b4b}.pill.warn{color:var(--warn)}.actions{display:flex;gap:8px}button{border:1px solid var(--line);background:#202630;color:var(--text);border-radius:8px;padding:8px 12px}button:hover{border-color:#566273}.primary{background:var(--accent);color:#07120c;border-color:var(--accent);font-weight:700}.banner{margin:14px 0;padding:10px 12px;background:#332a18;color:var(--warn);border:1px solid #665128;border-radius:8px}.hidden{display:none!important}.grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:16px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}.panel h2{font-size:15px;margin:0 0 12px;color:var(--muted);font-weight:650}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.card{border:1px solid var(--line);border-radius:10px;padding:14px;background:#11151a}.card:first-child{border-color:var(--accent)}.rank{font-size:12px;color:var(--muted)}.name{font-size:20px;font-weight:750;margin:2px 0}.meta,.small{color:var(--muted);font-size:13px}.score{color:var(--accent);font-weight:700}.risk{color:var(--warn);margin-top:8px}.card-actions{display:flex;gap:6px;margin-top:10px}.card-actions button{padding:5px 8px;font-size:12px}.metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin:10px 0}.metric{background:#1a2028;border-radius:6px;padding:6px}.metric b{display:block}.toolbar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}.toolbar input{flex:1;min-width:180px}.toolbar input,.toolbar select{background:#0d1116;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:7px 9px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 7px;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--muted);font-size:12px}.scroll{overflow:auto;max-height:540px}.roster{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}.roster div,.prediction{padding:7px;background:#11151a;border-radius:6px}.prediction{margin-bottom:6px}.news-item{border-top:1px solid var(--line);padding:9px 0}.news-item a{color:var(--blue)}.keybox{display:flex;gap:8px}.keybox input{flex:1;background:#0d1116;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px}.footer{color:var(--muted);font-size:12px;margin-top:12px}.positive{color:var(--accent)}.negative{color:var(--danger)}@media(max-width:900px){.grid{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.shell{padding:12px}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="top">
+      <div><h1>Draft Night</h1><div class="small">Minnesota Madness · Questionable · Pick 7</div></div>
+      <div id="status" class="status"></div>
+      <div class="actions"><button id="mock">New mock draft</button><button id="league" class="hidden">Return to league draft</button><button id="refresh">Refresh data</button><button id="copy" class="primary">Copy decision brief</button></div>
+    </header>
+    <div id="warning" class="banner hidden"></div>
+    <section id="key-panel" class="panel hidden">
+      <h2>Connect FantasyPros</h2>
+      <div class="keybox"><input id="key" type="password" autocomplete="off" placeholder="Paste key locally"><button id="save-key">Use for this session</button></div>
+      <div class="small">The key stays in this local Node process and is never saved by the browser.</div>
+    </section>
+    <div class="grid">
+      <div>
+        <section class="panel"><h2 id="recommendation-title">Recommendation for your next pick</h2><div id="cards" class="cards"></div></section>
+        <section class="panel" style="margin-top:16px"><h2>Available players</h2><div class="toolbar"><input id="search" placeholder="Search players"><select id="position"><option value="ALL">All positions</option><option>QB</option><option>RB</option><option>WR</option><option>TE</option></select><button id="show-excluded">Show excluded</button></div><div class="scroll"><table><thead><tr><th>#</th><th>Player</th><th>Pos</th><th>Proj</th><th>VORP</th><th>ADP</th><th>Next pick</th><th>Bye</th><th>Risk</th><th></th></tr></thead><tbody id="players"></tbody></table></div></section>
+      </div>
+      <aside>
+        <section class="panel"><h2>Your roster</h2><div id="roster" class="roster"></div></section>
+        <section class="panel" style="margin-top:16px"><h2>Likely before your pick</h2><div class="small" style="margin-bottom:8px">One modeled path, not a guarantee.</div><div id="predictions"></div></section>
+        <section class="panel" style="margin-top:16px"><h2>Latest candidate news</h2><div id="news" class="small">Select a player or wait for recommendations.</div></section>
+      </aside>
+    </div>
+    <div id="sources" class="footer"></div>
+  </main>
+    <script type="module" src="/app.js?v=20260902-9"></script>
+</body>
+</html>

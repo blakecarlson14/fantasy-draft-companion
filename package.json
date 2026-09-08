@@ -1,0 +1,12 @@
+{
+  "name": "draft-night",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "check:live": "node scripts/check-live.mjs",
+    "check:draft": "node scripts/simulate-draft.mjs",
+    "check:replay": "node scripts/replay-real-draft.mjs"
+  }
+}
