@@ -93,7 +93,8 @@ export function buildReport(snapshot) {
     const weakestDepth = [...positions].sort((a, b) => positionScores[a].depth[index] - positionScores[b].depth[index])[0];
     const risks = team.roster.filter(player => player.injury).map(player => `${player.name}: ${player.injury}${player.injuryNotes ? `. ${player.injuryNotes}` : ""}`);
     const publicPlayer = player => ({ id: player.id, name: player.name, position: player.position, slot: player.slot || "Bench" });
-    return { name: team.name, owner: team.owner, overall: complete ? letter(overallScore) : null, categories,
+    return { name: team.name, owner: team.owner, overall: complete ? letter(overallScore) : null,
+      starters: complete ? letter(starterScore) : null, depth: complete ? letter(depthScore) : null, categories,
       summary: complete ? `${ordered[0]} is the strongest fixed-position group against the positional reference roles; ${ordered.at(-1)} is the weakest. ${weakestDepth} has the thinnest drafted depth. Overall emphasizes the full starting lineup, including FLEX, with a smaller contribution from owned reserves.` : "League comparison is unavailable until every drafted roster has sufficient projection data.",
       strength: complete ? ordered[0] : null, weakness: complete ? ordered.at(-1) : null,
       risks: risks.length ? risks : ["No injury designation in this snapshot. That does not establish that the roster is risk-free."],

@@ -6,7 +6,9 @@ Implemented September 8, 2026. The user withdrew the contender-based A/F definit
 
 - Personal report for the completed 2026 Minnesota Madness draft. Reconstruct all 180 picks, never current rosters or subsequent transactions.
 - Twelve teams, fifteen players each. Start one QB, two RBs, three WRs, one TE, and two FLEX players, with six reserves. Half PPR plus an additional half point per TE reception.
-- Nine letter grades per team: overall and starters/depth for QB, RB, WR, TE. Include rosters, explanations, strengths, weaknesses, and injury flags. No numerical scores in the report UI.
+- League overview shows only each team's overall grade. Individual reports add total starter and depth grades, followed by starters/depth for QB, RB, WR, TE. This follows a verified public Footballguys report, documented in [layout research](../research/footballguys-report-layout.md). Include rosters, explanations, strengths, weaknesses, and injury flags. No numerical scores in the report UI.
+
+The layout has a verified Footballguys reference; the calculation below is independent, not a verified copy of its formula. The UI must disclose that letter calibration is provisional and not yet validated.
 - Overall describes projected roster strength, not pick value or championship probability. A strong selection at its price need not be an elite starter.
 - Use full-season Sleeper statistical projections scored under the league's rules throughout the report. Do not blend the differently dated FantasyPros cache or live draft recommendation score.
 - Prefer draft-day evidence. Only 40 of 180 drafted players have preserved draft-day decision values, so the user approved a common current-information fallback. The local snapshot was captured September 8, 2026. Retrieval time does not establish when each underlying projection changed.

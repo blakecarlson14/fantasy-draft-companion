@@ -40,6 +40,8 @@ test("report scores league rules, assigns FLEX once, and keeps missing projectio
   assert.equal(report.warning, null);
   for (const team of report.teams) {
     assert.equal(team.overall, "A+");
+    assert.equal(team.starters, "A+");
+    assert.equal(team.depth, "C-");
     assert.equal(team.roster.length, 15);
     assert.equal(team.categories.length, 4);
     assert.equal(team.categories.find(c => c.position === "QB").depth, "F");
@@ -51,6 +53,7 @@ test("report scores league rules, assigns FLEX once, and keeps missing projectio
   const incomplete = buildReport(snapshot);
   assert.ok(incomplete.warning);
   assert.ok(incomplete.teams.every(team => team.overall === null));
+  assert.ok(incomplete.teams.every(team => team.starters === null && team.depth === null));
   assert.equal(incomplete.teams.flatMap(team => team.missing).length, 1);
   snapshot.picks.pop();
   assert.throws(() => buildReport(snapshot), /180/);
@@ -161,6 +164,9 @@ test("report page renders letter grades, escapes external text, and offers retry
   const nodes = await render(async () => ({ ok: true, json: async () => report }));
   assert.equal(nodes.get("#report").hidden, false);
   assert.equal((nodes.get("#teams").innerHTML.match(/<tr>/g) || []).length, 12);
+  assert.equal((nodes.get("#teams").innerHTML.match(/<td/g) || []).length, 12, "League overview has only one grade per team");
+  assert.equal((nodes.get("#details").innerHTML.match(/team-grades/g) || []).length, 12);
+  assert.ok(html.includes("Provisional grades"));
   assert.ok(nodes.get("#teams").innerHTML.includes("&lt;img"));
   assert.ok(!nodes.get("#teams").innerHTML.includes("<img"));
   assert.ok(nodes.get("#snapshot").textContent.includes("not a draft-day evaluation"));
