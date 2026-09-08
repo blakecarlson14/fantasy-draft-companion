@@ -11,7 +11,7 @@ Status: implemented. Requirements were established in the grill-with-docs sessio
 - The initial audience is the user alone. Sharing with the league is not an initial requirement.
 - Follow Footballguys' report style, including positional analysis and separate starter and depth evaluations. Exact parity with its grades or proprietary formula is not required by the decisions so far.
 - Overall roster strength emphasizes championship potential, informed by projected production, depth, upside, and injury risk. Do not claim precise championship odds.
-- Compare teams within their own league. A middle-of-the-pack roster should receive roughly a C; similarly strong teams can receive similar grades.
+- Grade viability under this league's rules, not distance from the league average. A means a viable contender; B means competitive with manageable weaknesses; C means significant weaknesses; D means major problems; F means severe deficiencies. This supersedes the original C-centered curve. Multiple or all competitive teams may receive A-range grades.
 - Prefer information available by draft completion on draft day. In historical mode, later injuries, news, projections, and results must not affect grades or explanations.
 - Show nine grades per team: one overall grade and starter/depth grades for each of QB, RB, WR, and TE, with short explanations.
 - Present category evaluations as letter grades only. Keep numerical grading scores, component scores, and calculation weights internal; do not show numeric scores alongside the letters. Retain the agreed written explanations.
@@ -53,30 +53,34 @@ Select the highest projected legal starting lineup: 1 QB, 2 RB, 3 WR, 1 TE, and 
 
 ### Useful depth
 
-Evaluate the bench by how well it can cover unavailable starters. For each starter in turn, remove that player and find the best legal replacement lineup. Compare what the bench provides against a common baseline from players left undrafted. These are one-player absence scenarios, not estimates of injury probabilities; average their benefit to obtain a team depth measure.
+For each starter in turn, remove that player and find the best legal replacement lineup using the remaining roster and one undrafted baseline player. Average the resulting lineup production for the overall coverage component. These are one-player absence stress scenarios, not estimates of injury probabilities.
 
 Recompute FLEX assignments in each scenario. Do not credit starters as bench players or assume several teams can actually acquire the same replacement player. The undrafted pool is a comparison baseline, not a transaction prediction.
 
-The replacement baseline is the median projection among the three highest projected undrafted players at each position. For a one-player absence scenario, allow one baseline replacement at the absent player's position, and reassign FLEX as needed. Positional depth uses average coverage benefit for starters at that position.
+The replacement baseline is the median projection among the three highest projected undrafted players at each position. For a one-player absence scenario, allow one baseline replacement at the absent player's position, and reassign FLEX as needed. Positional depth measures recovered production above the surviving starters' total, averaged across absent starters at that position.
 
-QB/TE depth describes the advantage of carrying useful cover over relying on the undrafted pool. When the baseline reaches 65% of the league's average leading starter projection at that position, the displayed depth grade has a neutral C floor. This threshold is a simple coverage heuristic, not an injury or waiver probability. The overall grade still measures actual drafted bench benefit across all starter absence scenarios; the neutral positional floor does not award hypothetical bench production.
+Adequate reserve coverage is defined as restoring 65% of a typical starter's production at that position. Apply the same viability scale below to recovered production divided by this target. This heuristic reflects lower expectations for reserves than starters. A good undrafted baseline can provide adequate cover without a drafted backup; plentiful QB replacement options may produce strong QB depth grades throughout the league. This is coverage quality, not a reward for owning many backups or a prediction that a waiver claim will succeed.
 
 ### Overall formula and letters
 
-Overall score: `0.80 × starter score + 0.20 × depth score`.
+Build a league-sized benchmark from the entire frozen player pool: the top 12 QBs, 24 RBs, 36 WRs, and 12 TEs, plus the best 24 remaining RB/WR/TE players for FLEX. Divide production by 12 to obtain a representative team. No player fills two benchmark slots. Positional benchmarks use the fixed-position groups only.
 
-For each team component, normalize its raw measure as `75 + 10 × (value - league mean) / league standard deviation`, capped at 0–100. If every team has the same raw value, assign 75. Starter and depth measures are normalized separately. Positional grades use the same normalization within each position, with the QB/TE coverage floor described above. Weights and calibration are design choices, not Footballguys' known formula or validated championship probabilities.
+Overall viability ratio: `(0.80 × healthy lineup production + 0.20 × mean one-starter-absent lineup production) / benchmark lineup production`. Weight comparable projected points before converting to a grade, rather than combining independently curved scores. Positional starter ratios compare their fixed-slot production with the matching benchmark. Team names, owners, and Footballguys grades are never grading inputs.
+
+Convert ratios into internal scores using linear interpolation between these anchors: 0→0, 0.50→50, 0.65→60, 0.75→70, 0.85→80, 0.95→90, 1.00→93, 1.10→100. A-range therefore represents near-benchmark production, while low grades require substantial shortfalls. These thresholds are explicit judgment calls, not empirically validated playoff probabilities or Footballguys' proprietary formula.
 
 Letter bands: A+ at 97, A at 93, A− at 90, B+ at 87, B at 83, B− at 80, C+ at 77, C at 73, C− at 70, D+ at 67, D at 63, D− at 60, and F below 60. Compare unrounded scores against thresholds. Do not force a fixed number of teams into each band.
 
 Internal design examples only, not report presentation:
 
-| Starter score | Depth score | Overall | Grade |
-| --- | --- | --- | --- |
-| 95 | 85 | 93 | A |
-| 92 | 50 | 83.6 | B |
-| 75 | 75 | 75 | C |
-| 60 | 65 | 61 | D− |
+| Production relative to benchmark | Grade |
+| --- | --- |
+| 100% | A |
+| 95% | A− |
+| 90% | B |
+| 80% | C |
+| 70% | D |
+| 50% | F |
 
 ### Upside, risk, and explanations
 
@@ -94,6 +98,8 @@ Each report should explain which players and position groups drive its grades, h
 - No-backup QB/TE cases and FLEX reassignment are explicitly checked.
 - Grades, explanations, and source dates all refer to the same frozen evaluation snapshot.
 - The report displays letter grades without exposing internal numerical grading scores or weights.
+- A league of viable rosters may all receive good grades; known severely weak rosters receive F instead of an artificial C or a missing-data message.
+- Renaming a team does not change its grades.
 
 ## Reference
 

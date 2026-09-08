@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildReport, letter, lineup, normalize, projectedPoints, loadReport } from "../draft-report.mjs";
+import { buildReport, letter, lineup, viabilityScore, projectedPoints, loadReport } from "../draft-report.mjs";
 import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
 import { tmpdir } from "node:os";
@@ -39,11 +39,11 @@ test("report scores league rules, assigns FLEX once, and keeps missing projectio
   assert.equal(report.teams.length, 12);
   assert.equal(report.warning, null);
   for (const team of report.teams) {
-    assert.equal(team.overall, "C");
+    assert.match(team.overall, /^A/);
     assert.equal(team.roster.length, 15);
     assert.equal(team.categories.length, 4);
-    assert.equal(team.categories.find(c => c.position === "QB").depth, "C");
-    assert.equal(team.categories.find(c => c.position === "TE").depth, "C");
+    assert.match(team.categories.find(c => c.position === "QB").depth, /^A/);
+    assert.ok(team.categories.find(c => c.position === "TE").depth);
     assert.equal(Object.hasOwn(team, "sortScore"), false);
   }
   assert.deepEqual(buildReport(snapshot), report);
@@ -56,13 +56,36 @@ test("report scores league rules, assigns FLEX once, and keeps missing projectio
   assert.throws(() => buildReport(snapshot), /180/);
 });
 
-test("letter boundaries and an identical league have stable grades", () => {
-  assert.deepEqual(normalize([10, 10, 10]), [75, 75, 75]);
+test("viability thresholds reward competitive rosters without forcing a grade distribution", () => {
+  assert.equal(letter(viabilityScore(1)), "A");
+  assert.equal(letter(viabilityScore(0.95)), "A-");
+  assert.equal(letter(viabilityScore(0.9)), "B");
+  assert.equal(letter(viabilityScore(0.8)), "C");
+  assert.equal(letter(viabilityScore(0.7)), "D");
+  assert.equal(letter(viabilityScore(0.5)), "F");
   assert.equal(letter(93), "A");
   assert.equal(letter(92.999), "A-");
   assert.equal(letter(75), "C");
   assert.equal(letter(59), "F");
   assert.equal(letter(null), null);
+});
+
+test("known weak and incomplete rosters earn poor grades; team identity cannot affect grades", () => {
+  const snapshot = fixture();
+  for (const record of snapshot.projections.filter(record => record.player_id.startsWith("1-"))) {
+    record.stats = { rec_yd: 1, rec: 0 };
+  }
+  let report = buildReport(snapshot);
+  assert.equal(report.teams.find(team => team.owner === "owner-1").overall, "F");
+  assert.ok(report.teams.filter(team => team.owner !== "owner-1").every(team => team.overall.startsWith("A")));
+  snapshot.users = [{ user_id: "owner-1", metadata: { team_name: "My favorite team" } }];
+  assert.equal(buildReport(snapshot).teams.find(team => team.owner === "owner-1").overall, "F");
+  for (const record of snapshot.projections.filter(record => record.player_id.startsWith("1-"))) record.player.position = "QB";
+  report = buildReport(snapshot);
+  assert.equal(report.warning, null, "Known roster deficiencies are not missing source data");
+  const broken = report.teams.find(team => team.owner === "owner-1");
+  assert.equal(broken.overall, "F");
+  assert.equal(broken.categories.find(category => category.position === "TE").starters, "F");
 });
 
 test("FLEX allocation cannot inflate or dilute fixed-position starter grades", () => {
@@ -79,7 +102,7 @@ test("FLEX allocation cannot inflate or dilute fixed-position starter grades", (
       const previous = original.teams.find(team => team.owner === current.owner);
       assert.deepEqual(current.categories.map(c => c.starters), previous.categories.map(c => c.starters), `${position} FLEX must not change anyone's fixed-slot grades`);
     }
-    assert.notEqual(team.overall, original.teams.find(team => team.owner === "owner-1").overall, "FLEX improvement still contributes to overall strength");
+    assert.ok(team.overall, "FLEX improvement retains a valid overall grade without requiring a letter boundary crossing");
   }
 });
 

@@ -12,10 +12,14 @@ export function letter(value) {
   return [[97, "A+"], [93, "A"], [90, "A-"], [87, "B+"], [83, "B"], [80, "B-"], [77, "C+"], [73, "C"], [70, "C-"], [67, "D+"], [63, "D"], [60, "D-"]].find(([min]) => value >= min)?.[1] || "F";
 }
 
-export function normalize(values) {
-  const average = mean(values);
-  const deviation = Math.sqrt(mean(values.map(value => (value - average) ** 2)));
-  return values.map(value => deviation < 1e-8 ? 75 : Math.max(0, Math.min(100, 75 + 10 * (value - average) / deviation)));
+export function viabilityScore(ratio) {
+  const anchors = [[0, 0], [0.5, 50], [0.65, 60], [0.75, 70], [0.85, 80], [0.95, 90], [1, 93], [1.1, 100]];
+  if (ratio <= 0) return 0;
+  for (let i = 1; i < anchors.length; i++) {
+    const [upper, score] = anchors[i], [lower, previous] = anchors[i - 1];
+    if (ratio <= upper) return previous + (score - previous) * (ratio - lower) / (upper - lower);
+  }
+  return 100;
 }
 
 export function projectedPoints(record, scoring) {
@@ -43,6 +47,17 @@ export function buildReport(snapshot) {
     injuryNotes: record.player.injury_notes || null,
   }));
   const byId = new Map(players.map(player => [player.id, player]));
+  // Build equal-slot benchmarks from the full player pool, not the spread of this league's grades.
+  const pool = players.filter(player => Number.isFinite(player.points)).sort((a, b) => b.points - a.points);
+  const selected = new Set();
+  const benchmarks = Object.fromEntries(positions.map(position => {
+    const group = pool.filter(player => player.position === position).slice(0, slots.filter(slot => slot === position).length * 12);
+    group.forEach(player => selected.add(player.id));
+    return [position, sum(group.map(player => player.points)) / 12];
+  }));
+  const flexBenchmark = sum(pool.filter(player => player.position !== "QB" && !selected.has(player.id)).slice(0, 24).map(player => player.points)) / 12;
+  const lineupBenchmark = sum(Object.values(benchmarks)) + flexBenchmark;
+  if (Object.values(benchmarks).some(value => value <= 0) || flexBenchmark <= 0) throw new Error("Insufficient starting-lineup benchmark data.");
   const drafted = new Set(picks.map(pick => String(pick.player_id)));
   // ponytail: median of the top three undrafted projections is a streaming baseline, not a waiver acquisition forecast.
   const replacements = positions.map(position => {
@@ -61,35 +76,30 @@ export function buildReport(snapshot) {
     const bench = roster.filter(player => !starterIds.has(player.id));
     const missing = roster.filter(player => !Number.isFinite(player.points));
     const coverage = starters.map(starter => {
-      if (!starter) return 0;
+      if (!starter) return { total: sum(starters.filter(Boolean).map(player => player.points)), replacement: 0 };
       const baseline = starters.filter(player => player && player.id !== starter.id);
       const replacement = replacements.find(player => player.position === starter.position);
-      const fallback = lineup([...baseline, replacement]);
       const covered = lineup([...baseline, ...bench, replacement]);
-      return Math.max(0, sum(covered.filter(Boolean).map(player => player.points)) - sum(fallback.filter(Boolean).map(player => player.points)));
+      return { total: sum(covered.filter(Boolean).map(player => player.points)), replacement: Math.max(0, sum(covered.filter(Boolean).map(player => player.points)) - sum(baseline.map(player => player.points))) };
     });
     return { owner, name: user?.metadata?.team_name || user?.display_name || `Draft slot ${slot}`, roster, starters, bench, missing,
-      starterValue: sum(starters.filter(Boolean).map(player => player.points)), depthValue: mean(coverage), coverage,
+      starterValue: sum(starters.filter(Boolean).map(player => player.points)), coverage,
     };
   });
-  const complete = teams.every(team => !team.missing.length && team.starters.every(Boolean));
-  const starterScores = normalize(teams.map(team => team.starterValue));
-  const depthScores = normalize(teams.map(team => team.depthValue));
+  const complete = teams.every(team => !team.missing.length);
   const positionScores = Object.fromEntries(positions.map(position => [position, {
-    starters: normalize(teams.map(team => sum(team.starters.filter(player => player?.slot === position).map(player => player.points)))),
-    depth: normalize(teams.map(team => mean(team.coverage.filter((_, index) => team.starters[index]?.position === position)))),
+    starters: teams.map(team => viabilityScore(sum(team.starters.filter(player => player?.slot === position).map(player => player.points)) / benchmarks[position])),
+    // ponytail: a reserve restoring 65% of a typical starter is adequate cover; weekly injury/bye modeling would refine this.
+    depth: teams.map(team => viabilityScore(mean(team.coverage.filter((_, index) => team.starters[index]?.position === position).map(value => value.replacement)) / (0.65 * benchmarks[position] / slots.filter(slot => slot === position).length))),
   }]));
   const results = teams.map((team, index) => {
-    const overallScore = 0.8 * starterScores[index] + 0.2 * depthScores[index];
+    const overallScore = viabilityScore((0.8 * team.starterValue + 0.2 * mean(team.coverage.map(value => value.total))) / lineupBenchmark);
     const categories = positions.map(position => {
       const starters = team.starters.filter(player => player?.position === position);
       const bench = team.bench.filter(player => player.position === position);
-      let depth = positionScores[position].depth[index];
+      const depth = positionScores[position].depth[index];
       const replacement = replacements.find(player => player.position === position);
-      // A readily streamable one-starter position has neutral cover even without a drafted backup.
-      const typicalStarter = mean(teams.map(other => Math.max(...other.starters.filter(player => player?.position === position).map(player => player.points), 0)));
-      const streamable = ["QB", "TE"].includes(position) && replacement.points >= typicalStarter * 0.65;
-      if (streamable) depth = Math.max(75, depth);
+      const streamable = replacement.points >= benchmarks[position] / slots.filter(slot => slot === position).length * 0.65;
       const names = starters.filter(player => player.slot === position).map(player => player.name).join(", ");
       const flex = starters.filter(player => player.slot === "FLEX").map(player => player.name);
       return { position, starters: complete ? letter(positionScores[position].starters[index]) : null, depth: complete ? letter(depth) : null,
@@ -97,10 +107,11 @@ export function buildReport(snapshot) {
       };
     });
     const ordered = [...positions].sort((a, b) => positionScores[b].starters[index] - positionScores[a].starters[index]);
+    const weakestDepth = [...positions].sort((a, b) => positionScores[a].depth[index] - positionScores[b].depth[index])[0];
     const risks = team.roster.filter(player => player.injury).map(player => `${player.name}: ${player.injury}${player.injuryNotes ? `. ${player.injuryNotes}` : ""}`);
     const publicPlayer = player => ({ id: player.id, name: player.name, position: player.position, slot: player.slot || "Bench" });
     return { name: team.name, owner: team.owner, overall: complete ? letter(overallScore) : null, categories,
-      summary: complete ? `${ordered[0]} is the strongest positional contribution relative to this league; ${ordered.at(-1)} is the weakest. Starting production carries most of the overall grade, with useful bench cover also contributing.` : "League comparison is unavailable until every drafted roster has sufficient projection data.",
+      summary: complete ? `${ordered[0]} is the strongest fixed-position group against the league-sized starter benchmark; ${ordered.at(-1)} is the weakest. ${weakestDepth} has the thinnest coverage. The overall grade evaluates the full lineup, including FLEX, and how much production it retains when one starter is unavailable.` : "League comparison is unavailable until every drafted roster has sufficient projection data.",
       strength: complete ? ordered[0] : null, weakness: complete ? ordered.at(-1) : null,
       risks: risks.length ? risks : ["No injury designation in this snapshot. That does not establish that the roster is risk-free."],
       uncertainty: "Season projections do not measure player ceilings or championship probabilities. No separate upside bonus is assumed.",

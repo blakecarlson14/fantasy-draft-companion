@@ -67,7 +67,7 @@ A personal evaluation of the rosters assembled in a completed draft. Trades, wai
 _Avoid_: Live team evaluation
 
 **Overall roster grade**:
-A letter grade comparing a team's drafted roster with the other teams in its league, based on projected production and useful depth in the evaluation snapshot. Written analysis describes supported upside and risk.
+A letter grade for the viability of a team's drafted roster against a league-sized starting-lineup benchmark, based on projected production and coverage in the evaluation snapshot. A describes a viable contender and F severe deficiencies; grades are not forced onto a curve.
 _Avoid_: Draft execution grade
 
 **Draft-day evidence**:
