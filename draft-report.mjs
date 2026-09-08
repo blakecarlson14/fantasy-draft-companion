@@ -11,8 +11,25 @@ export function letter(value) {
   return [[97, "A+"], [93, "A"], [90, "A-"], [87, "B+"], [83, "B"], [80, "B-"], [77, "C+"], [73, "C"], [70, "C-"], [67, "D+"], [63, "D"], [60, "D-"]].find(([min]) => value >= min)?.[1] || "F";
 }
 
-export function roleScore(players, references, weights = references.map(() => 1)) {
-  return sum(references.map((reference, index) => Math.max(0, Math.min(1, (players[index]?.points || 0) / reference)) * weights[index])) / sum(weights) * 100;
+// Rank-role anchors establish the meaning first: fringe, ordinary, strong, best.
+// Letters are our convention, not Footballguys' unpublished cutoffs.
+export function qualityScore(points, references) {
+  const grouped = new Map();
+  for (const [value, score] of [[0, 0], [references[3], 75], [references[2], 85], [references[1], 95], [references[0], 100]]) {
+    grouped.set(value, [...(grouped.get(value) || []), score]);
+  }
+  // Equal projections cannot identify separate tiers. Merge them without a score discontinuity.
+  const anchors = [...grouped].map(([value, scores]) => [value, sum(scores) / scores.length]).sort((a, b) => a[0] - b[0]);
+  if (points <= 0) return 0;
+  for (let index = anchors.length - 1; index >= 0; index--) {
+    const [lower, score] = anchors[index];
+    if (points >= lower) {
+      if (index === anchors.length - 1) return score;
+      const [upper, next] = anchors[index + 1];
+      return score + (next - score) * (points - lower) / (upper - lower);
+    }
+  }
+  return 0;
 }
 
 export function projectedPoints(record, scoring) {
@@ -28,6 +45,15 @@ export function lineup(players) {
     const index = remaining.findIndex(player => slot === "FLEX" ? ["RB", "WR", "TE"].includes(player.position) : player.position === slot);
     return index < 0 ? null : { ...remaining.splice(index, 1)[0], slot };
   });
+}
+
+export function rosterProduction(players) {
+  const starters = lineup(players).filter(Boolean);
+  const ids = new Set(starters.map(player => player.id));
+  const bench = players.filter(player => !ids.has(player.id) && Number.isFinite(player.points));
+  const starting = sum(starters.map(player => Math.max(0, player.points)));
+  const reserves = sum(bench.filter(player => player.position !== "QB").map(player => Math.max(0, player.points))) + Math.max(0, ...bench.filter(player => player.position === "QB").map(player => player.points));
+  return { starting, reserves, overall: .9 * starting + .1 * reserves };
 }
 
 export function buildReport(snapshot) {
@@ -46,16 +72,20 @@ export function buildReport(snapshot) {
   const benchmarks = Object.fromEntries(positions.map(position => {
     const group = pool.filter(player => player.position === position).slice(0, slots.filter(slot => slot === position).length * 12);
     group.forEach(player => selected.add(player.id));
-    return [position, Array.from({ length: slots.filter(slot => slot === position).length }, (_, index) => group[index * 12]?.points)];
+    return [position, Array.from({ length: slots.filter(slot => slot === position).length }, (_, index) => [0, 2, 6, 11].map(rank => group[index * 12 + rank]?.points))];
   }));
   const flexPool = pool.filter(player => player.position !== "QB" && !selected.has(player.id)).slice(0, 24);
-  const flexBenchmark = [flexPool[0]?.points, flexPool[12]?.points];
+  const flexBenchmark = [0, 12].map(offset => [0, 2, 6, 11].map(rank => flexPool[offset + rank]?.points));
   flexPool.forEach(player => selected.add(player.id));
   const depthBenchmarks = Object.fromEntries(positions.map(position => {
     const reserves = pool.filter(player => player.position === position && !selected.has(player.id));
-    return [position, [reserves[0]?.points, ...(["RB", "WR"].includes(position) ? [reserves[12]?.points] : [])]];
+    return [position, [0, ...(["RB", "WR"].includes(position) ? [12] : [])].map(offset => [0, 2, 6, 11].map(rank => reserves[offset + rank]?.points))];
   }));
-  if ([...Object.values(benchmarks).flat(), ...flexBenchmark, ...Object.values(depthBenchmarks).flat()].some(value => !Number.isFinite(value) || value <= 0)) throw new Error("Insufficient positional benchmark data.");
+  if ([...Object.values(benchmarks).flat(2), ...flexBenchmark.flat(), ...Object.values(depthBenchmarks).flat(2)].some(value => !Number.isFinite(value) || value <= 0)) throw new Error("Insufficient positional benchmark data.");
+  const starterReferences = [0, 1, 2, 3].map(index => sum([...Object.values(benchmarks).flat(), ...flexBenchmark].map(role => role[index])));
+  const reserveReferences = [0, 1, 2, 3].map(index => sum(Object.values(depthBenchmarks).flat().map(role => role[index])));
+  const overallReferences = starterReferences.map((points, index) => .9 * points + .1 * reserveReferences[index]);
+  const groupScore = (players, references) => sum(references.map((role, index) => qualityScore(players[index]?.points || 0, role))) / references.length;
   const teams = Object.entries(draft.draft_order).map(([owner, slot]) => {
     const user = users.find(user => user.user_id === owner);
     const roster = picks.filter(pick => pick.draft_slot === slot).sort((a, b) => a.pick_no - b.pick_no).map(pick => byId.get(String(pick.player_id)) || {
@@ -70,23 +100,30 @@ export function buildReport(snapshot) {
   });
   const complete = teams.every(team => !team.missing.length);
   const positionScores = Object.fromEntries(positions.map(position => [position, {
-    starters: teams.map(team => roleScore(team.starters.filter(player => player?.slot === position), benchmarks[position])),
+    starters: teams.map(team => groupScore(team.starters.filter(player => player?.slot === position), benchmarks[position])),
     // ponytail: two reserve roles for RB/WR, one for QB/TE; weekly availability would require separate projections.
-    depth: teams.map(team => roleScore(team.bench.filter(player => player.position === position).sort((a, b) => b.points - a.points), depthBenchmarks[position], depthBenchmarks[position].map((_, index) => index === 0 ? 2 : 1))),
+    depth: teams.map(team => {
+      const reserves = team.bench.filter(player => player.position === position).sort((a, b) => b.points - a.points);
+      const scores = depthBenchmarks[position].map((role, index) => qualityScore(reserves[index]?.points || 0, role));
+      return (2 * scores[0] + (scores[1] || 0)) / (scores.length === 1 ? 2 : 3);
+    }),
   }]));
   const results = teams.map((team, index) => {
-    const starterScore = (sum(positions.map(position => positionScores[position].starters[index] * benchmarks[position].length)) + 2 * roleScore(team.starters.filter(player => player?.slot === "FLEX"), flexBenchmark)) / 9;
-    const depthScore = sum(positions.map(position => positionScores[position].depth[index] * benchmarks[position].length)) / 7;
-    const overallScore = 0.9 * starterScore + 0.1 * depthScore;
+    // All skill-position reserves can cover FLEX; only the best backup QB adds cover.
+    // .9*S + .1*B = .8*S + .1*(S+B): both terms are monotone under player upgrades.
+    const production = rosterProduction(team.roster);
+    const starterScore = qualityScore(production.starting, starterReferences);
+    const depthScore = qualityScore(production.reserves, reserveReferences);
+    const overallScore = qualityScore(production.overall, overallReferences);
     const categories = positions.map(position => {
       const starters = team.starters.filter(player => player?.position === position);
       const bench = team.bench.filter(player => player.position === position);
       const depth = positionScores[position].depth[index];
       const names = starters.filter(player => player.slot === position).map(player => player.name).join(", ");
-      const referenceNames = benchmarks[position].map((_, index) => pool.filter(player => player.position === position)[index * 12].name).join(", ");
+      const referenceNames = benchmarks[position].map((_, index) => pool.filter(player => player.position === position)[index * 12 + 6].name).join(", ");
       const flex = starters.filter(player => player.slot === "FLEX").map(player => player.name);
       return { position, starters: complete ? letter(positionScores[position].starters[index]) : null, depth: complete ? letter(depth) : null,
-        explanation: `Starter grade: ${names || "No starter"}. Reference players: ${referenceNames}. ${flex.length ? `${flex.join(", ")} contributes at FLEX to the overall grade, not this fixed-slot starter grade or bench depth. ` : ""}${bench.length ? `Reserve options: ${bench.map(player => player.name).join(", ")}.` : "No drafted reserve at this position. The depth F means no owned cover, not a bad draft decision."} Depth compares drafted reserves with positional reserve roles. Waiver pickups are not credited.`,
+        explanation: `Starter grade: ${names || "No starter"}. Ordinary role references: ${referenceNames}. ${flex.length ? `${flex.join(", ")} contributes at FLEX to the overall grade, not this fixed-slot starter grade or bench depth. ` : ""}${bench.length ? `Reserve options: ${bench.map(player => player.name).join(", ")}.` : "No drafted reserve at this position. The depth F means no owned cover, not a bad draft decision."} Positional depth measures cover at this position; overall depth also credits skill-position reserves that can cover FLEX. Waiver pickups are not credited.`,
       };
     });
     const ordered = [...positions].sort((a, b) => positionScores[b].starters[index] - positionScores[a].starters[index]);

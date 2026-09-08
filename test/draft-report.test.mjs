@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildReport, letter, lineup, roleScore, projectedPoints, loadReport } from "../draft-report.mjs";
+import { buildReport, letter, lineup, qualityScore, rosterProduction, projectedPoints, loadReport } from "../draft-report.mjs";
 import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
 import { tmpdir } from "node:os";
@@ -39,9 +39,9 @@ test("report scores league rules, assigns FLEX once, and keeps missing projectio
   assert.equal(report.teams.length, 12);
   assert.equal(report.warning, null);
   for (const team of report.teams) {
-    assert.equal(team.overall, "A+");
-    assert.equal(team.starters, "A+");
-    assert.equal(team.depth, "C-");
+    assert.equal(team.overall, "B+");
+    assert.equal(team.starters, "B+");
+    assert.equal(team.depth, "B");
     assert.equal(team.roster.length, 15);
     assert.equal(team.categories.length, 4);
     assert.equal(team.categories.find(c => c.position === "QB").depth, "F");
@@ -59,13 +59,16 @@ test("report scores league rules, assigns FLEX once, and keeps missing projectio
   assert.throws(() => buildReport(snapshot), /180/);
 });
 
-test("role calibration uses production ratios, caps excess, and penalizes empty roles", () => {
-  for (const [ratio, grade] of [[1, "A+"], [.95, "A"], [.9, "A-"], [.85, "B"], [.75, "C"], [.65, "D"], [.5, "F"]]) {
-    assert.equal(letter(roleScore([{ points: 200 * ratio }], [200])), grade);
+test("rank-role quality anchors distinguish ordinary quality from percentage of the elite", () => {
+  for (const references of [[350, 310, 291, 284], [253, 215, 174, 162]]) {
+    assert.equal(letter(qualityScore(references[0], references)), "A+");
+    assert.equal(letter(qualityScore(references[1], references)), "A");
+    assert.equal(letter(qualityScore(references[2], references)), "B");
+    assert.equal(letter(qualityScore(references[3], references)), "C");
+    assert.equal(letter(qualityScore(0, references)), "F");
+    assert.ok(qualityScore(references[3] * .8, references) < 75);
   }
-  assert.equal(roleScore([{ points: 1000 }], [200, 150]), 50, "One star cannot erase an empty second slot");
-  assert.equal(roleScore([], [200]), 0);
-  assert.ok(Math.abs(roleScore([{ points: 100 }], [100, 80], [2, 1]) - 200 / 3) < 1e-10);
+  assert.ok(Math.abs(qualityScore(100, [100,100,100,100]) - qualityScore(99.999, [100,100,100,100])) < .01, "Tied tiers cannot create discontinuities");
   assert.equal(letter(93), "A");
   assert.equal(letter(92.999), "A-");
   assert.equal(letter(75), "C");
@@ -79,23 +82,45 @@ test("roster stress cases distinguish elite starters, empty benches, and weaker 
   const target = report => report.teams.find(team => team.owner === "owner-1");
   const startingIds = new Set(target(original).roster.filter(player => player.slot !== "Bench").map(player => player.id));
   const shallow = structuredClone(baseline);
-  for (const record of shallow.projections.filter(record => record.player_id.startsWith("1-") && !startingIds.has(record.player_id))) record.stats = { rec: 0 };
+  for (const record of shallow.projections.filter(record => record.player_id.startsWith("1-") && !startingIds.has(record.player_id))) {
+    const id = `empty-${record.player_id}`;
+    shallow.projections.push({ ...record, player_id: id, stats: { rec: 0 } });
+    shallow.picks.find(pick => pick.player_id === record.player_id).player_id = id;
+  }
   const shallowReport = buildReport(shallow);
-  assert.equal(target(original).overall, "A+");
-  assert.equal(target(shallowReport).overall, "A-", "Empty depth loses a real part of the overall score");
+  assert.equal(target(original).overall, "B+");
+  assert.equal(target(shallowReport).overall, "B", "Empty depth loses a real part of the overall score");
   assert.deepEqual(target(shallowReport).categories.map(c => c.starters), target(original).categories.map(c => c.starters));
   assert.ok(target(shallowReport).categories.every(c => c.depth === "F"));
   for (const other of original.teams.filter(team => team.owner !== "owner-1")) {
-    assert.deepEqual(shallowReport.teams.find(team => team.owner === other.owner), other, "Changing a roster below reference ranks cannot curve other teams");
+    const current = shallowReport.teams.find(team => team.owner === other.owner);
+    assert.deepEqual(current.categories.map(({ starters, depth }) => [starters, depth]), other.categories.map(({ starters, depth }) => [starters, depth]), "Tied reference player names may change, but unchanged reference points retain grades");
+    assert.equal(current.overall, other.overall);
   }
   const weaker = structuredClone(baseline);
   for (const record of weaker.projections.filter(record => record.player_id.startsWith("1-"))) {
     record.stats = Object.fromEntries(Object.entries(record.stats).map(([key, value]) => [key, value * .75]));
   }
-  assert.match(target(buildReport(weaker)).overall, /^C/);
+  assert.match(target(buildReport(weaker)).overall, /^D/);
   const richerWaivers = structuredClone(baseline);
   for (const record of richerWaivers.projections.filter(record => record.player_id.includes("-free-"))) record.stats = { rec_yd: 1500 };
   assert.equal(target(buildReport(richerWaivers)).categories.find(c => c.position === "QB").depth, "F", "Available players cannot become owned depth");
+});
+
+test("player upgrades preserve overall production across FLEX moves and do not reward extra QBs", () => {
+  const crossing = [["QB",299.7],["RB",238.4],["RB",229.9],["RB",146.1],["RB",143.7],["RB",59.2],["WR",193.7],["WR",186.9],["WR",162.6],["WR",104.6],["TE",201.1],["TE",153.5],["TE",140.9],["TE",141.8],["QB",273.1]].map(([position, points], index) => ({ id: String(index), position, points }));
+  const promoted = crossing.map(player => player.id === "9" ? { ...player, points: player.points * 1.4 } : player);
+  assert.equal(lineup(promoted).find(player => player?.id === "9").slot, "FLEX");
+  assert.ok(rosterProduction(promoted).overall > rosterProduction(crossing).overall, "The real cross-position FLEX regression must retain upgrade credit");
+  const snapshot = fixture();
+  const players = snapshot.projections.slice(0, 15).map(record => ({ id: record.player_id, position: record.player.position, points: projectedPoints(record, snapshot.league.scoring_settings) }));
+  const original = rosterProduction(players).overall;
+  for (let index = 0; index < players.length; index++) for (const factor of [1.01, 1.1, 1.4, 2]) {
+    const upgraded = players.map((player, i) => i === index ? { ...player, points: player.points * factor } : player);
+    assert.ok(rosterProduction(upgraded).overall >= original);
+  }
+  const twoQBs = [...players, { id: "backup", position: "QB", points: 190 }];
+  assert.deepEqual(rosterProduction([...twoQBs, { id: "third", position: "QB", points: 180 }]), rosterProduction(twoQBs));
 });
 
 test("known weak and incomplete rosters earn poor grades; team identity cannot affect grades", () => {

@@ -1,5 +1,7 @@
 # Grading scenario checks
 
+Historical results for the earlier percentage-of-best model. The subsequent [roster audit](roster-grading-audit.md) found defects this exercise missed and replaced that method. Run the script for current results; the original counts below are retained as history.
+
 Run September 8, 2026 with the existing frozen evaluation snapshot. No projections, real picks, thresholds, or grading weights changed during this exercise.
 
 ## Method

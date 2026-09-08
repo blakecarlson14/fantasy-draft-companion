@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { buildReport, projectedPoints } from "../draft-report.mjs";
+import { buildReport, projectedPoints, qualityScore, letter, rosterProduction } from "../draft-report.mjs";
 
 // Independent ADP-driven mock drafts; never use actual picks, team identities, or target grades.
 // ponytail: scenario calibration, not a weekly simulation or historical outcome backtest.
@@ -73,4 +73,30 @@ for (let seed = 1; seed <= 100; seed++) for (const mode of ["ordinary", "reaches
   }
 }
 assert.ok(benchDrops > 0, "Owned depth must have observable influence on overall grades");
-console.log(JSON.stringify({ ordinaryMockLeagues: 100, reachMockLeagues: 100, ordinaryRosters: 1200, benchDrops, reachDrops, counts }, null, 2));
+// Independent role examples were established in research before looking at league letters.
+const scored = source.projections.filter(record => positions.includes(record.player?.position)).map(record => ({
+  id: String(record.player_id), position: record.player.position, points: projectedPoints(record, source.league.scoring_settings),
+})).filter(player => Number.isFinite(player.points)).sort((a, b) => b.points - a.points);
+const roleExamples = {};
+for (const [position, roles] of [["QB", 1], ["RB", 2], ["WR", 3], ["TE", 1]]) {
+  const group = scored.filter(player => player.position === position);
+  roleExamples[position] = {};
+  for (const [label, rank] of [["strong", 3], ["ordinary", 7], ["weak", 19]]) {
+    const exampleRank = label === "weak" && roles === 1 ? 18 : rank;
+    const score = Array.from({ length: roles }, (_, index) => qualityScore(group[index * 12 + exampleRank - 1].points, [0, 2, 6, 11].map(offset => group[index * 12 + offset].points))).reduce((a, b) => a + b, 0) / roles;
+    roleExamples[position][label] = letter(score);
+  }
+  assert.equal(roleExamples[position].strong, "A");
+  assert.equal(roleExamples[position].ordinary, "B");
+  assert.ok(strength(roleExamples[position].weak) < strength("B"));
+}
+const real = buildReport(source);
+let upgrades = 0;
+for (const team of real.teams) {
+  const roster = team.roster.map(player => scored.find(candidate => candidate.id === player.id));
+  for (const player of roster) for (const factor of [1.01, 1.1, 1.4, 2]) {
+    assert.ok(rosterProduction(roster.map(candidate => candidate.id === player.id ? { ...candidate, points: candidate.points * factor } : candidate)).overall >= rosterProduction(roster).overall);
+    upgrades++;
+  }
+}
+console.log(JSON.stringify({ ordinaryMockLeagues: 100, reachMockLeagues: 100, ordinaryRosters: 1200, benchDrops, reachDrops, playerUpgradeChecks: upgrades, roleExamples, counts }, null, 2));
