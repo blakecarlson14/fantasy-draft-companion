@@ -59,3 +59,29 @@ _Avoid_: Static rankings, cheat sheet
 **Bye-week resilience**:
 A roster's ability to field a competitive lineup when several drafted players are unavailable during scheduled bye weeks.
 _Avoid_: Bye-week coverage
+
+## Draft grading
+
+**Draft report**:
+A personal evaluation of the rosters assembled in a completed draft. Trades, waiver claims, and other roster moves after the draft do not change which players it evaluates.
+_Avoid_: Live team evaluation
+
+**Overall roster grade**:
+A letter grade comparing a team's drafted roster with the other teams in its league, based on projected production and useful depth in the evaluation snapshot. Written analysis describes supported upside and risk.
+_Avoid_: Draft execution grade
+
+**Draft-day evidence**:
+Information available by draft completion that supports grades and explanations. Later news, projections, and results are excluded.
+_Avoid_: Current player outlook
+
+**Evaluation snapshot**:
+The fixed body of evidence used to evaluate every drafted roster. It uses draft-day evidence when available, or a clearly dated later evaluation when that evidence is insufficient.
+_Avoid_: Live grade
+
+**Starter grade**:
+A position group's letter grade for its contribution to the starting lineup, including players assigned to FLEX.
+_Avoid_: Position slot grade
+
+**Depth grade**:
+A position group's letter grade for the remaining drafted players behind its starters. Players counted as starters, including FLEX starters, are not also counted as depth.
+_Avoid_: Bench quantity

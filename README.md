@@ -23,6 +23,16 @@ The browser checks Sleeper for picks every 750 milliseconds, backed by a 250-mil
 
 Use the **New mock draft** button to paste a Sleeper draftboard URL. Mock mode stays in that tab's URL, so a separate tab can keep following the league draft.
 
+## Draft report
+
+Open <http://localhost:4173/report.html> or select **Draft report** in the companion header. It grades all 12 original Minnesota Madness rosters, with an overall letter grade and starter/depth letters for QB, RB, WR, and TE. Select a team for explanations, injury flags, and its drafted roster.
+
+The complete draft-day projection dataset was not preserved. The report therefore uses the approved fallback: a dated snapshot of current Sleeper season projections, scored with the league's rules. It is explicitly labeled as a later evaluation of the original drafted rosters. It does not follow subsequent transactions.
+
+The first complete evaluation is saved in `draft-logs/grading-snapshot-2026.json`. Keep this file to preserve the same report across restarts or machines; it is intentionally excluded from Git with the other draft logs. A fresh checkout fetches the completed draft and creates its own dated snapshot. Incomplete projection coverage shows an unavailable explanation instead of freezing misleading grades.
+
+The scoring method and its limitations are documented in [the grading requirements](docs/draft-grading-requirements.md). Numerical grading scores are internal; the report displays letters only.
+
 ## Check
 
 ```bash

@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadReport } from "./draft-report.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(root, "public");
@@ -22,6 +23,7 @@ let fantasyProsKey = process.env.FANTASYPROS_API_KEY || "";
 let fantasyProsUsage = { date: localDate(), calls: 0 };
 let usageSave = Promise.resolve();
 const loggedPicks = new Map();
+let reportRequest;
 
 await Promise.all([mkdir(cacheDir, { recursive: true }), mkdir(logDir, { recursive: true })]);
 try {
@@ -200,6 +202,10 @@ const server = createServer(async (request, response) => {
     const requestedDraftId = url.searchParams.get("draft_id");
     if (requestedDraftId && !/^\d{15,20}$/.test(requestedDraftId)) return sendJson(response, 400, { error: "Invalid Sleeper draft ID" });
     const activeDraftId = requestedDraftId || leagueDraftId;
+    if (request.method === "GET" && url.pathname === "/api/draft-report") {
+      reportRequest ||= loadReport(root, fetchJson).finally(() => { reportRequest = null; });
+      return sendJson(response, 200, await reportRequest);
+    }
     if (request.method === "GET" && url.pathname === "/api/bootstrap") return sendJson(response, 200, await bootstrap(activeDraftId));
     if (request.method === "GET" && url.pathname === "/api/draft-state") return sendJson(response, 200, await draftState(activeDraftId));
     if (request.method === "GET" && url.pathname === "/api/news") {
