@@ -17,15 +17,17 @@
   <p id="status" role="status">Loading the draft report…</p>
   <button id="retry" hidden>Try again</button>
   <div id="report" hidden>
-    <p class="notice">Provisional grades. The report structure follows a verified Footballguys example; our numerical method is independent and its letter calibration is not yet validated.</p>
+    <details class="muted"><summary>About these grades</summary><p>The report structure follows a verified Footballguys example. Our independent formula has been checked against mock drafts and roster stress scenarios, not historical playoff outcomes. It does not reproduce Footballguys' unpublished calculation.</p></details>
     <div class="notice" id="snapshot"></div>
-    <section class="panel" aria-labelledby="league-title">
+    <section class="panel" id="league" aria-labelledby="league-title">
       <h2 id="league-title">Around the league</h2>
       <p class="muted">Select a team for its starter, depth, and positional breakdown. Both FLEX slots count toward overall. Grades use our frozen projections, not Footballguys' calculations.</p>
       <div class="scroll" tabindex="0" role="region" aria-label="League grades, scroll horizontally on small screens">
         <table><thead><tr><th scope="col">Team</th><th scope="col">Overall grade</th></tr></thead><tbody id="teams"></tbody></table>
       </div>
     </section>
+    <label for="team-choice">Team report</label>
+    <select id="team-choice" style="max-width:100%"></select>
     <div id="details"></div>
     <footer id="source"></footer>
   </div>
@@ -35,6 +37,17 @@
   const escape = value => String(value ?? "").replace(/[&<>"']/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[character]));
   const grade = value => escape(value || "Unavailable");
   const date = value => new Date(value).toLocaleString("en-US", {timeZone:"America/Chicago", dateStyle:"medium", timeStyle:"short"}) + " CT";
+  function showTeam(scroll = false) {
+    const sections = [...document.querySelectorAll("#details > section")];
+    const selected = sections.find(section => `#${section.id}` === location.hash) || sections[0];
+    if (!selected) return;
+    sections.forEach(section => { section.hidden = section !== selected; });
+    $("#team-choice").value = selected.id;
+    if (scroll && location.hash.startsWith("#team-")) {
+      selected.scrollIntoView();
+      selected.querySelector("h2").focus({ preventScroll: true });
+    }
+  }
   async function load() {
     $("#retry").hidden = true;
     $("#status").textContent = "Loading the draft report…";
@@ -44,13 +57,17 @@
       if (!response.ok) throw new Error(data.error || "The report could not be loaded.");
       $("#snapshot").textContent = `Original rosters from the draft completed ${date(data.draftEndedAt)}. Evaluated using information retrieved ${date(data.evaluatedAt)} because a complete draft-day dataset was unavailable. This is not a draft-day evaluation. ${data.warning ? "This response is incomplete and has not been frozen." : "The evaluation snapshot is frozen; later roster moves and source updates do not change it."}`;
       $("#teams").innerHTML = data.teams.map((team,index) => `<tr><th scope="row"><a href="#team-${index}">${escape(team.name)}</a></th><td class="grade">${grade(team.overall)}</td></tr>`).join("");
-      $("#details").innerHTML = data.teams.map((team,index) => `<section class="panel" id="team-${index}" aria-labelledby="heading-${index}"><div class="team-heading"><div><h2 id="heading-${index}">${escape(team.name)}</h2><span class="muted">Overall roster grade</span></div><strong class="hero-grade">${grade(team.overall)}</strong></div><div class="grade-pair team-grades"><div><span>Starter grade</span><strong>${grade(team.starters)}</strong></div><div><span>Depth grade</span><strong>${grade(team.depth)}</strong></div></div><p>${escape(team.summary)}</p><h3>Grades by position</h3>${team.missing.length ? `<p>Missing projections: ${team.missing.map(escape).join(", ")}</p>` : ""}<div class="categories">${team.categories.map(category => `<article class="category"><h3>${category.position}</h3><div class="grade-pair"><div><span>Starters</span><strong>${grade(category.starters)}</strong></div><div><span>Depth</span><strong>${grade(category.depth)}</strong></div></div><p>${escape(category.explanation)}</p></article>`).join("")}</div><h3 style="margin-top:20px">Risk and outlook</h3><ul>${team.risks.map(risk => `<li>${escape(risk)}</li>`).join("")}</ul><p class="muted">${escape(team.uncertainty)}</p><details><summary>View drafted roster</summary><ul class="roster">${team.roster.map(player => `<li><span>${escape(player.slot)}</span> ${escape(player.name)} <small class="muted">${escape(player.position)}</small></li>`).join("")}</ul></details></section>`).join("");
+      $("#team-choice").innerHTML = data.teams.map((team,index) => `<option value="team-${index}">${escape(team.name)}</option>`).join("");
+      $("#details").innerHTML = data.teams.map((team,index) => `<section class="panel" id="team-${index}" aria-labelledby="heading-${index}"><a href="#league">← League overview</a><div class="team-heading"><div><h2 tabindex="-1" id="heading-${index}">${escape(team.name)}</h2><span class="muted">Overall roster grade</span></div><strong class="hero-grade">${grade(team.overall)}</strong></div><div class="grade-pair team-grades"><div><span>Starter grade</span><strong>${grade(team.starters)}</strong></div><div><span>Depth grade</span><strong>${grade(team.depth)}</strong></div></div><p>${escape(team.summary)}</p><h3>Grades by position</h3>${team.missing.length ? `<p>Missing projections: ${team.missing.map(escape).join(", ")}</p>` : ""}<div class="categories">${team.categories.map(category => `<article class="category"><h3>${category.position}</h3><div class="grade-pair"><div><span>Starters</span><strong>${grade(category.starters)}</strong></div><div><span>Depth</span><strong>${grade(category.depth)}</strong></div></div><p>${escape(category.explanation)}</p></article>`).join("")}</div><h3 style="margin-top:20px">Risk and outlook</h3><ul>${team.risks.map(risk => `<li>${escape(risk)}</li>`).join("")}</ul><p class="muted">${escape(team.uncertainty)}</p><details><summary>View drafted roster</summary><ul class="roster">${team.roster.map(player => `<li><span>${escape(player.slot)}</span> ${escape(player.name)} <small class="muted">${escape(player.position)}</small></li>`).join("")}</ul></details></section>`).join("");
       $("#source").textContent = `Source: ${data.source.name}. ${data.source.horizon}. Retrieved ${date(data.source.fetchedAt)}. League scoring includes the TE reception premium. FLEX players count as starters. Grades are independent estimates, not Footballguys grades or championship probabilities.`;
       $("#status").textContent = data.warning || "";
       $("#report").hidden = false;
+      showTeam(Boolean(location.hash));
     } catch (error) { $("#status").textContent = error.message; $("#retry").hidden = false; }
   }
   $("#retry").addEventListener("click", load);
+  $("#team-choice").addEventListener("change", event => { location.hash = event.target.value; });
+  window.addEventListener("hashchange", () => showTeam(true));
   load();
 </script>
 </body>

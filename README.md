@@ -25,7 +25,9 @@ Use the **New mock draft** button to paste a Sleeper draftboard URL. Mock mode s
 
 ## Draft report
 
-Open <http://localhost:4173/report.html> or select **Draft report** in the companion header. It grades all 12 original Minnesota Madness rosters, with an overall letter grade and starter/depth letters for QB, RB, WR, and TE. Select a team for explanations, injury flags, and its drafted roster.
+Open <http://localhost:4173/report.html> or select **Draft report** in the companion header. The league overview shows each team's overall grade. Select one team for its overall starter/depth summaries, positional grades, explanations, injury flags, and drafted roster. The structure follows the verified Footballguys example; calculations use our own data and documented formula.
+
+Run `npm run check:grading` to check the scale against independent ADP-driven mock leagues and depleted rosters using the frozen snapshot. These scenario checks do not establish playoff prediction accuracy.
 
 The complete draft-day projection dataset was not preserved. The report therefore uses the approved fallback: a dated snapshot of current Sleeper season projections, scored with the league's rules. It is explicitly labeled as a later evaluation of the original drafted rosters. It does not follow subsequent transactions.
 

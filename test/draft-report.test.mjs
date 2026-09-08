@@ -157,8 +157,8 @@ test("report page renders letter grades, escapes external text, and offers retry
   report.teams[0].name = '<img src=x onerror="alert(1)">';
   const render = async fetch => {
     const nodes = new Map();
-    const document = { querySelector(selector) { if (!nodes.has(selector)) nodes.set(selector, { hidden: true, addEventListener() {} }); return nodes.get(selector); } };
-    await runInNewContext(script, { document, fetch });
+    const document = { querySelectorAll() { return []; }, querySelector(selector) { if (!nodes.has(selector)) nodes.set(selector, { hidden: true, addEventListener() {} }); return nodes.get(selector); } };
+    await runInNewContext(script, { document, fetch, location: { hash: "" }, window: { addEventListener() {} } });
     return nodes;
   };
   const nodes = await render(async () => ({ ok: true, json: async () => report }));
@@ -166,7 +166,8 @@ test("report page renders letter grades, escapes external text, and offers retry
   assert.equal((nodes.get("#teams").innerHTML.match(/<tr>/g) || []).length, 12);
   assert.equal((nodes.get("#teams").innerHTML.match(/<td/g) || []).length, 12, "League overview has only one grade per team");
   assert.equal((nodes.get("#details").innerHTML.match(/team-grades/g) || []).length, 12);
-  assert.ok(html.includes("Provisional grades"));
+  assert.ok(html.includes("not historical playoff outcomes"));
+  assert.equal((nodes.get("#team-choice").innerHTML.match(/<option/g) || []).length, 12);
   assert.ok(nodes.get("#teams").innerHTML.includes("&lt;img"));
   assert.ok(!nodes.get("#teams").innerHTML.includes("<img"));
   assert.ok(nodes.get("#snapshot").textContent.includes("not a draft-day evaluation"));

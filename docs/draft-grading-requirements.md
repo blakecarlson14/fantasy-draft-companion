@@ -8,12 +8,13 @@ Implemented September 8, 2026. The user withdrew the contender-based A/F definit
 - Twelve teams, fifteen players each. Start one QB, two RBs, three WRs, one TE, and two FLEX players, with six reserves. Half PPR plus an additional half point per TE reception.
 - League overview shows only each team's overall grade. Individual reports add total starter and depth grades, followed by starters/depth for QB, RB, WR, TE. This follows a verified public Footballguys report, documented in [layout research](../research/footballguys-report-layout.md). Include rosters, explanations, strengths, weaknesses, and injury flags. No numerical scores in the report UI.
 
-The layout has a verified Footballguys reference; the calculation below is independent, not a verified copy of its formula. The UI must disclose that letter calibration is provisional and not yet validated.
 - Overall describes projected roster strength, not pick value or championship probability. A strong selection at its price need not be an elite starter.
 - Use full-season Sleeper statistical projections scored under the league's rules throughout the report. Do not blend the differently dated FantasyPros cache or live draft recommendation score.
 - Prefer draft-day evidence. Only 40 of 180 drafted players have preserved draft-day decision values, so the user approved a common current-information fallback. The local snapshot was captured September 8, 2026. Retrieval time does not establish when each underlying projection changed.
 - Keep the snapshot frozen. Methodology revisions must not refetch it. Label this as a later evaluation of original drafted rosters, not a draft-day evaluation.
 - Withhold grades league-wide if any drafted projection is missing. Known zero production or an empty position is a weakness, not missing evidence.
+
+The user accepted the linked Footballguys example as the presentation reference. Show one selected team report at a time, with a team selector and links back to the league overview. Its calculation remains independent. Explain that scenario checks are not historical outcome validation or a reproduction of Footballguys' formula.
 
 ## Positional reference roles
 
@@ -61,4 +62,6 @@ Run `npm test` for the checks in `test/draft-report.test.mjs`.
 - Unchanged fixed-position groups retain grades when a reserve enters FLEX below their reference ranks. Names cannot change grades. Missing projections withhold grades. Reopening a saved snapshot cannot fetch new inputs.
 - Browser checks cover letter-only rendering, escaped team names, error/retry states, and mobile overflow.
 
-These checks establish formula behavior, not historical predictive accuracy. No independent multi-season outcome validation or broad realistic mock-draft calibration has been completed. Season totals do not establish weekly consistency, ceiling, or injury probabilities. Avoid invented upside bonuses and double-counted injury penalties. Low projections are not proof that a prospect has no upside.
+Run `npm run check:grading` with the saved evaluation snapshot for independent ADP-driven mock leagues and roster stress scenarios. See [scenario results](../research/grading-scenario-checks.md). This check uses no actual team identities or picks and does not call the draft recommendation engine. The exercise supported retaining the existing thresholds and weights, not targeting a grade distribution for this league.
+
+These checks establish formula behavior, not historical predictive accuracy. No independent multi-season outcome validation has been completed. Season totals do not establish weekly consistency, ceiling, or injury probabilities. Avoid invented upside bonuses and double-counted injury penalties. Low projections are not proof that a prospect has no upside.
